@@ -17,6 +17,7 @@ struct Event {
     path: String,
     event_type: String,
     duration: u32,
+    fd: i32,
 }
 
 static mut EVENTS: Vec<Event> = Vec::new();
@@ -31,10 +32,9 @@ fn init() {
         path: String::from("__PROCESS__"),
         event_type: String::from("init"),
         duration: timestamp,
+        fd: 0,
     };
     unsafe { EVENTS.push(rec) };
-
-    println!("Hello, world!");
 }
 
 fn write_csv(path: &Path) -> Result<(), Box<dyn Error>> {
@@ -62,6 +62,7 @@ fn fini() {
         path: String::from("__PROCESS__"),
         event_type: String::from("fini"),
         duration: timestamp,
+        fd: 0,
     };
     unsafe { EVENTS.push(rec) };
 
@@ -84,23 +85,61 @@ fn benchmark<F: Fn() -> i32>(function: F) -> (i32, u32) {
     return (ret, duration);
 }
 
+fn load_func(name: &str) -> Result<*mut c_void, Box<dyn Error>> {
+    unsafe {
+        let fname = CString::new(name).expect("Failed to allocate CString!");
+        let fhandle = dlsym(RTLD_NEXT, fname.as_ptr());
+        if fhandle.is_null() {
+            //println!(format!("Failed to load function {name}!"));
+            return Err(format!("Failed to load function {name}!").into());
+        } else {
+            return Ok(fhandle);
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn open(pathname: *const c_char, flags: i32, mode: u32) -> i32 {
     let path = unsafe { CStr::from_ptr(pathname) };
 
-    let cast_func = unsafe {
-        let fname = CString::new("open").expect("Failed to allocate CString!");
-        let fhandle = dlsym(RTLD_NEXT, fname.as_ptr());
-        if fhandle.is_null() {
-            println!("Failed to load function open!");
-            return -1;
-        }
-        transmute::<*mut c_void, fn(*const c_char, i32, u32) -> i32>(fhandle)
+    let cast_func = match load_func("open") {
+        Ok(fhandle) => unsafe {
+            transmute::<*mut c_void, fn(*const c_char, i32, u32) -> i32>(fhandle)
+        },
+        Err(e) => return -1,
     };
 
     let closure = || -> i32 { cast_func(pathname, flags, mode) };
     let (ret, duration) = benchmark(closure);
 
-    println!("Time elapsed in expensive_function() is: {:?}", duration);
+    let rec = Event {
+        path: path.to_str().expect("NONE").to_string(),
+        event_type: String::from("open"),
+        duration: duration,
+        fd: ret,
+    };
+    unsafe { EVENTS.push(rec) };
+
+    return ret;
+}
+
+#[no_mangle]
+pub extern "C" fn close(fd: i32) -> i32 {
+    let cast_func = match load_func("close") {
+        Ok(fhandle) => unsafe { transmute::<*mut c_void, fn(i32) -> i32>(fhandle) },
+        Err(e) => return -1,
+    };
+
+    let closure = || -> i32 { cast_func(fd) };
+    let (ret, duration) = benchmark(closure);
+
+    let rec = Event {
+        path: String::from(""),
+        event_type: String::from("close"),
+        duration: duration,
+        fd: fd,
+    };
+    unsafe { EVENTS.push(rec) };
+
     return ret;
 }

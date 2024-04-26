@@ -8,5 +8,7 @@ name = "libioprof"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
+csv = "1.3.0"
 ctor = "0.2.8"
 libc = "0.2.153"
+serde = { version = "1.0.198", features = ["derive"] } 

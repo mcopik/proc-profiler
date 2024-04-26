@@ -8,4 +8,5 @@ name = "libioprof"
 crate-type   = ["rlib", "cdylib"]
 
 [dependencies]
+ctor = "0.2.8"
 libc = "0.2.153"

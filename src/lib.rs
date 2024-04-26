@@ -1,7 +1,53 @@
+use ctor::{ctor, dtor};
 use libc::{c_char, c_void, dlsym, RTLD_NEXT};
 use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::io::Write;
 use std::mem::transmute;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+struct Event {
+    path: String,
+    event_type: String,
+    duration: u32,
+}
+
+static mut EVENTS: Vec<Event> = Vec::new();
+
+#[ctor]
+fn init() {
+    let timestamp: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("")
+        .subsec_nanos();
+    let rec = Event {
+        path: String::from("__PROCESS__"),
+        event_type: String::from("init"),
+        duration: timestamp,
+    };
+    unsafe { EVENTS.push(rec) };
+
+    println!("Hello, world!");
+}
+
+#[dtor]
+fn fini() {
+    let timestamp: u32 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("")
+        .subsec_nanos();
+    let rec = Event {
+        path: String::from("__PROCESS__"),
+        event_type: String::from("fini"),
+        duration: timestamp,
+    };
+    unsafe { EVENTS.push(rec) };
+
+    let mut file = File::create("foo.txt").expect("");
+    let _ = file.write_all(b"Hello, world!");
+
+    println!("Hello, world!");
+}
 
 fn benchmark<F: Fn() -> i32>(function: F) -> (i32, u32) {
     let start = Instant::now();

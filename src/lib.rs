@@ -1,9 +1,12 @@
 use ctor::{ctor, dtor};
 use libc::{c_char, c_void, dlsym, RTLD_NEXT};
+use std::env;
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::Write;
 use std::mem::transmute;
+use std::path::Path;
+use std::process;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 struct Event {
@@ -43,10 +46,17 @@ fn fini() {
     };
     unsafe { EVENTS.push(rec) };
 
-    let mut file = File::create("foo.txt").expect("");
-    let _ = file.write_all(b"Hello, world!");
+    let logs_dir = match env::var("PROC_IO_PROFILER_LOGS") {
+        Ok(val) => val,
+        Err(_) => String::from("."),
+    };
+    let pid = process::id();
+    let filepath = format!("result_{pid}.csv");
 
-    println!("Hello, world!");
+    let path = Path::new(&logs_dir).join(filepath);
+
+    let mut file = File::create(path).expect("");
+    let _ = file.write_all(b"Hello, world!");
 }
 
 fn benchmark<F: Fn() -> i32>(function: F) -> (i32, u32) {

@@ -1,6 +1,9 @@
+use csv::{Writer, WriterBuilder};
 use ctor::{ctor, dtor};
 use libc::{c_char, c_void, dlsym, RTLD_NEXT};
+use serde;
 use std::env;
+use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::Write;
@@ -9,6 +12,7 @@ use std::path::Path;
 use std::process;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+#[derive(serde::Serialize)]
 struct Event {
     path: String,
     event_type: String,
@@ -33,6 +37,21 @@ fn init() {
     println!("Hello, world!");
 }
 
+fn write_csv(path: &Path) -> Result<(), Box<dyn Error>> {
+    let file = File::create(path)?;
+
+    let mut wtr = WriterBuilder::new().has_headers(true).from_writer(file);
+    unsafe {
+        for ev in EVENTS.iter() {
+            wtr.serialize(&ev);
+        }
+    }
+
+    wtr.flush()?;
+
+    Ok(())
+}
+
 #[dtor]
 fn fini() {
     let timestamp: u32 = SystemTime::now()
@@ -52,11 +71,9 @@ fn fini() {
     };
     let pid = process::id();
     let filepath = format!("result_{pid}.csv");
-
     let path = Path::new(&logs_dir).join(filepath);
 
-    let mut file = File::create(path).expect("");
-    let _ = file.write_all(b"Hello, world!");
+    write_csv(&path).expect("Failed to write the resul!");
 }
 
 fn benchmark<F: Fn() -> i32>(function: F) -> (i32, u32) {

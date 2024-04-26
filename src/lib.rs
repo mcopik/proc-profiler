@@ -3,6 +3,14 @@ use std::ffi::{CStr, CString};
 use std::mem::transmute;
 use std::time::Instant;
 
+fn benchmark<F: Fn() -> i32>(function: F) -> (i32, u32) {
+    let start = Instant::now();
+    let ret = function();
+    let duration: u32 = start.elapsed().subsec_nanos();
+
+    return (ret, duration);
+}
+
 #[no_mangle]
 pub extern "C" fn open(pathname: *const c_char, flags: i32, mode: u32) -> i32 {
     let path = unsafe { CStr::from_ptr(pathname) };
@@ -17,9 +25,9 @@ pub extern "C" fn open(pathname: *const c_char, flags: i32, mode: u32) -> i32 {
         transmute::<*mut c_void, fn(*const c_char, i32, u32) -> i32>(fhandle)
     };
 
-    let start = Instant::now();
-    let ret = cast_func(pathname, flags, mode);
-    let duration: u32 = start.elapsed().subsec_nanos();
+    let closure = || -> i32 { cast_func(pathname, flags, mode) };
+    let (ret, duration) = benchmark(closure);
+
     println!("Time elapsed in expensive_function() is: {:?}", duration);
     return ret;
 }
